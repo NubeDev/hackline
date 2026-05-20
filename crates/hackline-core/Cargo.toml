@@ -1,0 +1,30 @@
+[package]
+name = "hackline-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "TCP <-> Zenoh bridging helpers shared by gateway and agent"
+
+[lints]
+workspace = true
+
+[dependencies]
+hackline-proto = { path = "../hackline-proto" }
+tokio = { workspace = true }
+zenoh = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[[example]]
+name = "spike"
+path = "examples/spike.rs"
+
+[dev-dependencies]
+tokio = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }

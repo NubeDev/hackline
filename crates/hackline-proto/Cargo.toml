@@ -1,0 +1,49 @@
+[package]
+name = "hackline-proto"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "Wire types and key-expression builders for hackline"
+
+[lints]
+workspace = true
+
+[features]
+default = []
+# Codegen-only: derives `specta::Type` on every wire type so the
+# `tests/specta_snapshot.rs` test and `examples/wire_ts.rs` binary can
+# emit TypeScript. Default builds (mobile/agent/gateway) skip the
+# extra dep entirely. `specta-typescript` is pulled in alongside
+# `specta` because the envelope types use `#[specta(type =
+# specta_typescript::Unknown)]` to render their `serde_json::Value`
+# payloads as TS `unknown` — the override needs the type path
+# resolvable at derive time.
+specta = ["dep:specta", "dep:specta-typescript"]
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+thiserror = { workspace = true }
+specta = { workspace = true, optional = true }
+specta-typescript = { workspace = true, optional = true }
+
+[dev-dependencies]
+specta = { workspace = true }
+specta-typescript = { workspace = true }
+
+# The TS codegen test and example need the optional `specta` feature
+# enabled to see the `specta::Type` derives. Without `required-features`
+# a default-feature `cargo test --workspace` would try to build them
+# and fail; with it, the targets are only compiled when the feature is
+# explicitly requested (`cargo test --features specta`).
+[[test]]
+name = "specta_snapshot"
+required-features = ["specta"]
+
+[[example]]
+name = "wire_ts"
+required-features = ["specta"]

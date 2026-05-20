@@ -1,0 +1,59 @@
+/* hackline-agent diag UI — minimal helpers on top of Bootstrap. */
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+  font-size: 0.875rem;
+}
+
+.card-section {
+  margin-bottom: 1.25rem;
+}
+
+.card-section .card-header {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  color: var(--bs-secondary-color);
+}
+
+dl.kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.35rem 1rem;
+  margin: 0;
+}
+
+dl.kv dt {
+  color: var(--bs-secondary-color);
+  font-weight: 500;
+}
+
+dl.kv dd {
+  margin: 0;
+  word-break: break-all;
+}
+
+.empty {
+  color: var(--bs-secondary-color);
+  font-style: italic;
+}
+
+table.events {
+  width: 100%;
+  font-size: 0.875rem;
+}
+
+table.events td,
+table.events th {
+  vertical-align: top;
+  padding: 0.35rem 0.5rem;
+}
+
+.outcome-ok {
+  color: var(--bs-success);
+}
+.outcome-error {
+  color: var(--bs-danger);
+}

@@ -1,0 +1,151 @@
+# First CI for hackline. Runs the same gates operators run locally
+# (cargo fmt + cargo test + cargo clippy + cargo doc + cargo audit +
+# cargo deny + cargo machete + workspace builds + UI typecheck/build
+# + the loopback real-binary client tests via `make test-client`).
+#
+# See DOCS/sessions/2026-05-16-goal36-github-actions-ci.md,
+# DOCS/sessions/2026-05-17-goal38-promote-clippy-ci-gate.md,
+# DOCS/sessions/2026-05-17-goal41-cargo-audit.md,
+# DOCS/sessions/2026-05-17-goal42-cargo-deny.md,
+# DOCS/sessions/2026-05-17-goal44-cargo-machete.md, and
+# DOCS/sessions/2026-05-18-goal49-cargo-fmt-ci-gate.md for context.
+
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+# Cancel superseded in-flight runs on the same ref so a rapid push
+# cadence doesn't queue redundant builds.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # CI runs against current stable. The workspace declares an
+      # MSRV via `Cargo.toml`'s `rust-version` (cargo enforces that
+      # for downstream consumers); pinning CI to the MSRV instead
+      # also pins clippy's lint set to whatever shipped with that
+      # rustc, which drifts (`uninlined_format_args` fires on 1.88
+      # but not on 1.95, etc.). Keep the contract simple: MSRV is a
+      # downstream promise, CI is a freshness check.
+      - name: install rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: install node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: install js dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Runs first because rustfmt failures are the cheapest to
+      # diagnose and a misformatted tree means every later gate's
+      # log has noisy whitespace diffs to scroll past. The codebase
+      # was brought under rustfmt in goal 48; this step ensures it
+      # stays there.
+      - name: cargo fmt
+        run: cargo fmt --all -- --check
+
+      - name: cargo test
+        run: cargo test --workspace
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      # Builds rustdoc with warnings promoted to errors so broken
+      # intra-doc links, missing-disambiguator references, and
+      # invalid HTML caught by rustdoc fail CI. --document-private-items
+      # so the gate covers the same surface humans read locally
+      # (`cargo doc --open` defaults to public + private when the
+      # workspace flag is absent on a single crate, but the
+      # workspace form needs the explicit flag).
+      - name: cargo doc
+        run: cargo doc --workspace --no-deps --document-private-items
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+
+      # Checks Cargo.lock against the RustSec advisory database.
+      # Ignored advisories live in `.cargo/audit.toml` with a
+      # one-line rationale and an upstream-fix tracker each.
+      - name: cargo audit
+        uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Layers licence allowlist, source-registry policy, and
+      # version-wildcard bans on top of cargo-audit. Policy and
+      # advisory ignores live in `deny.toml`; the advisories list
+      # is kept in sync with `.cargo/audit.toml` by hand.
+      - name: cargo deny
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+
+      # Catches `[dependencies]` entries no source file imports.
+      # False positives (rare; usually macro re-exports or
+      # build-script-only deps) go in a Cargo.toml's
+      # `[package.metadata.cargo-machete] ignored = [...]` with
+      # a rationale comment.
+      - name: install cargo-machete
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-machete
+
+      - name: cargo machete
+        run: cargo machete
+
+      - name: build hackline-ts client
+        run: pnpm -C clients/hackline-ts build
+
+      - name: typecheck ui
+        run: pnpm -C ui/hackline-ui typecheck
+
+      - name: build ui
+        run: pnpm -C ui/hackline-ui build
+
+      # Builds the gateway binary internally and then runs the
+      # loopback vitest suite against a real spawned server.
+      - name: client integration tests
+        run: make test-client
+
+  # Verifies the declared MSRV (`Cargo.toml`'s `rust-version`) still
+  # compiles the workspace. Runs `cargo check`, not clippy or test:
+  # clippy lints drift between rustc releases (the gates job owns
+  # lint policy on current stable), and tests pull in extra dev-dep
+  # graphs the MSRV claim does not cover. A failure here means
+  # something in the tree (source or lockfile) now needs a newer
+  # rustc than the declared floor — bump `rust-version` in lockstep.
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install rust toolchain
+        uses: dtolnay/rust-toolchain@1.88
+
+      - name: cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: msrv
+
+      - name: cargo check
+        run: cargo check --workspace --all-targets

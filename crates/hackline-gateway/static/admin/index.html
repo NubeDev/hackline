@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>hackline admin</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="admin.css" />
+</head>
+<body>
+<header>
+  <h1>hackline admin</h1>
+  <div class="auth">
+    <label>Bearer token <input id="token" type="password" placeholder="hk_..." /></label>
+    <button id="save-token">save</button>
+    <span id="status"></span>
+  </div>
+</header>
+<nav>
+  <button data-tab="devices" class="active">devices</button>
+  <button data-tab="tunnels">live tunnels</button>
+  <button data-tab="cmd">cmd outbox</button>
+  <button data-tab="events">live events</button>
+  <button data-tab="audit">audit</button>
+  <button data-tab="metrics">metrics</button>
+</nav>
+<main>
+  <section id="tab-devices" class="tab active"><h2>devices</h2><div id="devices-out">loading...</div></section>
+  <section id="tab-tunnels" class="tab"><h2>live tunnels</h2><p>Open + recently closed tunnel sessions, joined from <code>/v1/audit?limit=…</code> where <code>action = "tunnel.session"</code>.</p><div id="tunnels-out">loading...</div></section>
+  <section id="tab-cmd" class="tab"><h2>cmd outbox</h2>
+    <label>device <input id="cmd-device" type="number" min="1" value="1" /></label>
+    <label>status <select id="cmd-status"><option value="">(any)</option><option>pending</option><option>delivered</option><option>acked</option></select></label>
+    <button id="cmd-refresh">refresh</button>
+    <div id="cmd-out">enter a device id and click refresh</div>
+  </section>
+  <section id="tab-events" class="tab"><h2>live events</h2>
+    <label>device <input id="events-device" type="number" min="1" value="1" /></label>
+    <button id="events-start">stream</button>
+    <button id="events-stop" disabled>stop</button>
+    <pre id="events-out"></pre>
+  </section>
+  <section id="tab-audit" class="tab"><h2>audit</h2><div id="audit-out">loading...</div></section>
+  <section id="tab-metrics" class="tab"><h2>metrics</h2><pre id="metrics-out">loading...</pre></section>
+</main>
+<script src="admin.js"></script>
+</body>
+</html>

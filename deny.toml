@@ -1,0 +1,84 @@
+# cargo-deny policy. Layered on top of cargo-audit (.cargo/audit.toml)
+# with the licence + source + bans checks cargo-audit does not cover.
+# Rationale per non-trivial entry is mandatory; bare allow/ignore
+# entries should not land.
+
+[graph]
+all-features = true
+no-default-features = false
+
+[advisories]
+version = 2
+# Mirrors .cargo/audit.toml. Cargo-deny does not read cargo-audit's
+# config, so the ignore list is duplicated; keep them in sync.
+ignore = [
+    # RUSTSEC-2026-0041 — lz4_flex 0.10.0 decompression info-leak,
+    # pinned at 0.10.0 by zenoh-transport 1.9.0's caret range; fix
+    # is >=0.11.6, outside the resolvable range. Revisit on zenoh
+    # bump (https://github.com/eclipse-zenoh/zenoh).
+    "RUSTSEC-2026-0041",
+    # RUSTSEC-2024-0436 — paste no longer maintained. Pulled in
+    # transitively (sqlx-macros uses it); no security impact, no
+    # drop-in replacement on the resolved version. Revisit when
+    # sqlx migrates off paste.
+    "RUSTSEC-2024-0436",
+    # RUSTSEC-2025-0134 — rustls-pemfile unmaintained. Pulled in
+    # transitively under gateway's `tls` feature by instant-acme
+    # → hyper-rustls. Upstream guidance is to migrate to
+    # rustls-pki-types' PemObject API; tracked against instant-acme
+    # / hyper-rustls releases (no resolvable upgrade today).
+    "RUSTSEC-2025-0134",
+]
+
+[licenses]
+version = 2
+# Permissive licences the lockfile already uses. New non-permissive
+# entries fail the gate by default; add to `exceptions` with
+# rationale rather than expanding this list.
+allow = [
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "EPL-2.0",
+    "ISC",
+    "MIT",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+confidence-threshold = 0.93
+
+# Per-crate licence exceptions. Each entry must explain why the
+# crate is acceptable despite its licence.
+[[licenses.exceptions]]
+# r-efi ships LGPL-2.1-or-later, which is not in the allow list
+# because of the static-linking source-disclosure clause. The crate
+# is EFI-target-only bindings and never links into our Linux/macOS
+# binaries — exempted per-crate rather than broadly allowing LGPL.
+name = "r-efi"
+allow = ["LGPL-2.1-or-later"]
+
+[[licenses.exceptions]]
+# webpki-root-certs ships under CDLA-Permissive-2.0, the licence
+# Mozilla uses for the bundled root-CA list. It is a permissive
+# data licence (no copyleft, no patent restrictions on the data
+# itself). Pulled in transitively via rustls-platform-verifier
+# → hyper-rustls → instant-acme under gateway's `tls` feature.
+name = "webpki-root-certs"
+allow = ["CDLA-Permissive-2.0"]
+
+[bans]
+multiple-versions = "warn"
+# wildcards = "deny" with allow-wildcard-paths = true forbids `*`
+# on real registry deps while permitting it on workspace/path deps,
+# which is the conventional way to wire workspace siblings together
+# (`hackline-core = { path = "../hackline-core", version = "*" }`).
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

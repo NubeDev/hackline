@@ -1,0 +1,904 @@
+openapi: 3.1.0
+info:
+  title: hackline gateway REST API
+  version: "1.0.0"
+  summary: HTTP control plane for the hackline gateway daemon.
+  description: |
+    Authoritative machine-readable surface for the hackline gateway. The
+    prose companion lives at `DOCS/REST-API.md`; if the two disagree the
+    Rust router in `crates/hackline-gateway/src/api/router.rs` wins and
+    both documents must be updated.
+
+    Conventions:
+
+    - All routes are prefixed `/v1`. The version is part of the URL
+      because the wire contract is what changes across releases.
+    - Every endpoint requires `Authorization: Bearer <token>` except
+      `GET /v1/health`, `GET /v1/claim/status`, and `POST /v1/claim`.
+    - Requests and responses are `application/json; charset=utf-8`
+      unless explicitly noted (SSE endpoints emit `text/event-stream`).
+    - Timestamps are integer seconds since the Unix epoch, UTC.
+    - Numeric IDs are `i64`. ZIDs are 16-hex-character Zenoh identifiers.
+    - Non-2xx responses share the shape `{ "error": "<message>" }`.
+  license:
+    name: See repository LICENSE
+servers:
+  - url: "http://{host}:{port}"
+    description: Local or LAN gateway.
+    variables:
+      host:
+        default: localhost
+      port:
+        default: "7080"
+  - url: "https://{host}"
+    description: Public gateway behind a reverse proxy (Caddy/Nginx).
+    variables:
+      host:
+        default: gateway.example.com
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Health
+  - name: Claim
+  - name: Devices
+  - name: Tunnels
+  - name: Users
+  - name: Audit
+  - name: Events
+
+paths:
+  /v1/health:
+    get:
+      tags: [Health]
+      summary: Liveness probe.
+      description: Unauthenticated. Used by Caddy/Docker/Kubernetes.
+      security: []
+      responses:
+        "200":
+          description: Gateway process is up.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+
+  /v1/claim/status:
+    get:
+      tags: [Claim]
+      summary: Report whether the gateway can be claimed.
+      security: []
+      responses:
+        "200":
+          description: Current claim state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClaimStatus"
+
+  /v1/claim:
+    post:
+      tags: [Claim]
+      summary: Atomically consume the pending claim and mint the owner token.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClaimRequest"
+      responses:
+        "201":
+          description: Owner user created; raw token returned once.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClaimResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          description: Gateway is already claimed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/devices:
+    get:
+      tags: [Devices]
+      summary: List devices visible to the caller.
+      responses:
+        "200":
+          description: Possibly empty list of devices.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Device"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [Devices]
+      summary: Register a new device by ZID.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeviceCreate"
+      responses:
+        "201":
+          description: Device row created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Device"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /v1/devices/{id}:
+    parameters:
+      - $ref: "#/components/parameters/DeviceId"
+    get:
+      tags: [Devices]
+      summary: Fetch one device row.
+      responses:
+        "200":
+          description: Device row.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Device"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Devices]
+      summary: Mutate label and/or customer assignment.
+      description: Only `label` and `customer_id` are accepted. Any other field is rejected with `400`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DevicePatch"
+      responses:
+        "200":
+          description: Updated device row.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Device"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Devices]
+      summary: Delete a device.
+      description: Cascades to `tunnels` via foreign key.
+      responses:
+        "204":
+          description: Deleted.
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/devices/{id}/info:
+    parameters:
+      - $ref: "#/components/parameters/DeviceId"
+    get:
+      tags: [Devices]
+      summary: Live Zenoh query to `hackline/<zid>/info`.
+      responses:
+        "200":
+          description: Agent-reported metadata.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentInfo"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "504":
+          description: Agent did not respond within `info_query_timeout`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/devices/health:
+    get:
+      tags: [Devices]
+      summary: Collection-level health for every device in the caller's org.
+      description: |
+        Single call that fans the per-device health probe out across
+        every device visible to the caller. The same in-process
+        cache backs both this endpoint and `GET /v1/devices/{id}/health`,
+        so a steady poll loop pays the per-device probe cost only
+        once per cache TTL window. A failed probe yields
+        `rtt_ms: null` for that entry; it never fails the request
+        or cancels other entries.
+      responses:
+        "200":
+          description: One entry per device in the caller's org.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceHealthList"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /v1/devices/{id}/health:
+    parameters:
+      - $ref: "#/components/parameters/DeviceId"
+    get:
+      tags: [Devices]
+      summary: Liveness summary derived from `last_seen_at` and a Zenoh probe.
+      responses:
+        "200":
+          description: Health summary.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceHealth"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/devices/{id}/events:
+    parameters:
+      - $ref: "#/components/parameters/DeviceId"
+    get:
+      tags: [Events]
+      summary: SSE stream scoped to one device.
+      description: |
+        `text/event-stream`. Only events whose `device_id` (or whose
+        owning tunnel's `device_id`) matches `:id` are emitted. No
+        replay; reconnect is the client's responsibility.
+      responses:
+        "200":
+          description: SSE stream open.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: One `data:` line per `Event` variant, blank line separator.
+              examples:
+                deviceOnline:
+                  value: |
+                    data: {"type":"device_online","device_id":1}
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/tunnels:
+    get:
+      tags: [Tunnels]
+      summary: List tunnels visible to the caller.
+      responses:
+        "200":
+          description: Possibly empty list of tunnels.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Tunnel"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [Tunnels]
+      summary: Open a new TCP listener or HTTP host route.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TunnelCreate"
+      responses:
+        "201":
+          description: Tunnel row created; the manager binds on its next reconcile pass.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tunnel"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /v1/tunnels/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    delete:
+      tags: [Tunnels]
+      summary: Close the listener (TCP) or remove the host route (HTTP).
+      responses:
+        "204":
+          description: Deleted.
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/users:
+    get:
+      tags: [Users]
+      summary: List users. Owner scope only.
+      responses:
+        "200":
+          description: All user rows (no token material).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [Users]
+      summary: Mint a new scoped user. Owner scope only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserCreate"
+      responses:
+        "201":
+          description: User row created; raw token returned once.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserCreated"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /v1/users/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    delete:
+      tags: [Users]
+      summary: Revoke a user and all their tokens. Owner scope only.
+      description: The owner row cannot be deleted via this endpoint.
+      responses:
+        "204":
+          description: Revoked.
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/users/{id}/tokens:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    post:
+      tags: [Users]
+      summary: Mint an additional token for an existing user (rotation).
+      description: Owner scope only. Adds; does not replace. Old tokens stay valid until individually revoked.
+      responses:
+        "201":
+          description: Additional token minted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenMinted"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/audit:
+    get:
+      tags: [Audit]
+      summary: Cursor-paginated read of the audit table.
+      description: |
+        `cursor` is the `id` of the last row in the previous page
+        (exclusive); omit it on the first request. `limit` defaults to
+        100, capped at 500. Rows are oldest-first within a page. Offset
+        pagination is intentionally not supported.
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        "200":
+          description: A page of audit rows.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditPage"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /v1/events:
+    get:
+      tags: [Events]
+      summary: SSE firehose across every device. Admin only.
+      responses:
+        "200":
+          description: SSE stream open.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+              examples:
+                tunnelConnection:
+                  value: |
+                    data: {"type":"tunnel_connection","tunnel_id":7,"request_id":"7e57..."}
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: |
+        Bearer token issued by `POST /v1/claim` (owner) or
+        `POST /v1/users` / `POST /v1/users/:id/tokens` (scoped users).
+        Tokens are stored as Argon2id hashes; the raw value is only
+        shown at mint time.
+
+  parameters:
+    DeviceId:
+      name: id
+      in: path
+      required: true
+      description: Numeric primary key from `GET /v1/devices`.
+      schema:
+        type: integer
+        format: int64
+
+  responses:
+    BadRequest:
+      description: Validation failure.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Missing or invalid bearer token.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: Token scope does not cover the resource.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Row does not exist or the caller cannot see it.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: |
+            Human-readable message. Internal failures collapse to the
+            literal string `"internal error"`; structured detail goes to
+            the gateway log only.
+
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+
+    ClaimStatus:
+      type: object
+      required: [claimed, can_claim]
+      properties:
+        claimed:
+          type: boolean
+          description: True once any owner-scoped user exists.
+        can_claim:
+          type: boolean
+          description: True iff a non-expired `claim_pending` row exists.
+
+    ClaimRequest:
+      type: object
+      required: [claim_token, label]
+      properties:
+        claim_token:
+          type: string
+          description: One-time token printed at install.
+        label:
+          type: string
+
+    ClaimResponse:
+      type: object
+      required: [user_id, token, scope]
+      properties:
+        user_id:
+          type: integer
+          format: int64
+        token:
+          type: string
+          description: Raw bearer token, shown once.
+        scope:
+          type: string
+          enum: [owner]
+
+    Zid:
+      type: string
+      description: 16-hex-character Zenoh identifier.
+      pattern: "^[0-9a-fA-F]{16}$"
+      example: a1b2c3d4e5f60718
+
+    Device:
+      type: object
+      required: [id, zid, label, customer_id, created_at, last_seen_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        zid:
+          $ref: "#/components/schemas/Zid"
+        label:
+          type: string
+        customer_id:
+          type: [integer, "null"]
+          format: int64
+        created_at:
+          type: integer
+          format: int64
+          description: Unix epoch seconds.
+        last_seen_at:
+          type: [integer, "null"]
+          format: int64
+
+    DeviceCreate:
+      type: object
+      required: [zid, label]
+      properties:
+        zid:
+          $ref: "#/components/schemas/Zid"
+        label:
+          type: string
+
+    DevicePatch:
+      type: object
+      description: Both fields optional. `customer_id: null` clears the assignment.
+      additionalProperties: false
+      properties:
+        label:
+          type: string
+        customer_id:
+          type: [integer, "null"]
+          format: int64
+
+    AgentInfo:
+      type: object
+      required: [zid, version, allowed_ports, uptime_s]
+      properties:
+        zid:
+          type: string
+          description: Identity the agent loaded from its config — may differ
+            from the gateway's stored `zid` if the device row is stale.
+        version:
+          type: string
+          description: Cargo package version of the running agent
+            (`CARGO_PKG_VERSION`).
+        allowed_ports:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+            maximum: 65535
+        uptime_s:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Seconds since the agent process started, derived from a
+            monotonic clock.
+
+    DeviceHealth:
+      type: object
+      required: [online, last_seen_at, rtt_ms]
+      properties:
+        online:
+          type: boolean
+        last_seen_at:
+          type: [integer, "null"]
+          format: int64
+        rtt_ms:
+          type: [integer, "null"]
+          description: Null when `online` is false.
+
+    DeviceHealthEntry:
+      type: object
+      required: [device_id, online, last_seen_at, rtt_ms]
+      properties:
+        device_id:
+          type: integer
+          format: int64
+        online:
+          type: boolean
+        last_seen_at:
+          type: [integer, "null"]
+          format: int64
+        rtt_ms:
+          type: [integer, "null"]
+          description: Null when the probe timed out, errored, or returned no replies.
+
+    DeviceHealthList:
+      type: object
+      required: [items]
+      description: |
+        Wrapped in `{ items }` to match the page-envelope shape used
+        by other collection endpoints, even though this one is not
+        paginated. Each entry carries `device_id` so callers can
+        join against `GET /v1/devices` without parsing it from a
+        stringly-typed object key.
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/DeviceHealthEntry"
+
+    TunnelKind:
+      type: string
+      enum: [tcp, http]
+
+    Tunnel:
+      type: object
+      required:
+        - id
+        - device_id
+        - kind
+        - local_port
+        - public_hostname
+        - public_port
+        - enabled
+        - created_at
+      properties:
+        id:
+          type: integer
+          format: int64
+        device_id:
+          type: integer
+          format: int64
+        kind:
+          $ref: "#/components/schemas/TunnelKind"
+        local_port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        public_hostname:
+          type: [string, "null"]
+        public_port:
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 65535
+        enabled:
+          type: boolean
+        created_at:
+          type: integer
+          format: int64
+
+    TunnelCreate:
+      type: object
+      required: [device_id, kind, local_port]
+      description: |
+        `kind = "tcp"` requires `public_port` and forbids `public_hostname`.
+        `kind = "http"` requires `public_hostname` and forbids `public_port`.
+      properties:
+        device_id:
+          type: integer
+          format: int64
+        kind:
+          $ref: "#/components/schemas/TunnelKind"
+        local_port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        public_hostname:
+          type: [string, "null"]
+        public_port:
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 65535
+      oneOf:
+        - title: TCP listener
+          required: [kind, public_port]
+          properties:
+            kind:
+              const: tcp
+            public_hostname:
+              type: "null"
+            public_port:
+              type: integer
+        - title: HTTP host route
+          required: [kind, public_hostname]
+          properties:
+            kind:
+              const: http
+            public_hostname:
+              type: string
+            public_port:
+              type: "null"
+
+    UserScope:
+      type: string
+      enum: [owner, customer]
+
+    User:
+      type: object
+      required: [id, label, scope, customer_id, created_at, last_used_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        label:
+          type: string
+        scope:
+          $ref: "#/components/schemas/UserScope"
+        customer_id:
+          type: [integer, "null"]
+          format: int64
+        created_at:
+          type: integer
+          format: int64
+        last_used_at:
+          type: [integer, "null"]
+          format: int64
+
+    UserCreate:
+      type: object
+      required: [label, scope]
+      properties:
+        label:
+          type: string
+        scope:
+          $ref: "#/components/schemas/UserScope"
+        customer_id:
+          type: [integer, "null"]
+          format: int64
+          description: Required when `scope = "customer"`, must be null when `scope = "owner"`.
+
+    UserCreated:
+      type: object
+      required: [user_id, token]
+      properties:
+        user_id:
+          type: integer
+          format: int64
+        token:
+          type: string
+          description: Raw bearer token, shown once.
+
+    TokenMinted:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+          description: Raw bearer token, shown once.
+
+    AuditEntry:
+      type: object
+      required: [id, at, actor_user_id, action, subject, detail]
+      properties:
+        id:
+          type: integer
+          format: int64
+        at:
+          type: integer
+          format: int64
+          description: Unix epoch seconds.
+        actor_user_id:
+          type: [integer, "null"]
+          format: int64
+        action:
+          type: string
+          description: Dotted verb, e.g. `tunnel.create`, `device.delete`.
+        subject:
+          type: string
+          description: "`<resource>:<id>` reference, e.g. `tunnel:1`."
+        detail:
+          description: Free-form per-action payload.
+          type: object
+          additionalProperties: true
+
+    AuditPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditEntry"
+        next_cursor:
+          type: [integer, "null"]
+          format: int64
+          description: Null when the page is the last one.
+
+    Event:
+      description: |
+        Variants of `hackline_proto::event::Event`, serialised with
+        `tag = "type"`, `rename_all = "snake_case"`.
+      oneOf:
+        - type: object
+          required: [type, device_id]
+          properties:
+            type:
+              const: device_online
+            device_id:
+              type: integer
+              format: int64
+        - type: object
+          required: [type, device_id]
+          properties:
+            type:
+              const: device_offline
+            device_id:
+              type: integer
+              format: int64
+        - type: object
+          required: [type, tunnel_id]
+          properties:
+            type:
+              const: tunnel_opened
+            tunnel_id:
+              type: integer
+              format: int64
+        - type: object
+          required: [type, tunnel_id]
+          properties:
+            type:
+              const: tunnel_closed
+            tunnel_id:
+              type: integer
+              format: int64
+        - type: object
+          required: [type, tunnel_id, request_id]
+          properties:
+            type:
+              const: tunnel_connection
+            tunnel_id:
+              type: integer
+              format: int64
+            request_id:
+              type: string

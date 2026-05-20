@@ -1,0 +1,49 @@
+# Weekly re-scan of Cargo.lock against the RustSec advisory database
+# and the cargo-deny policy. The main `ci.yml` runs both gates on
+# every push / PR, but advisories land continuously and the lockfile
+# can be unchanged for weeks at a time — without a scheduled run, a
+# fresh RUSTSEC against current pins would not surface until the
+# next code change happened to touch the repo.
+#
+# Runs the security gates only (audit + deny). Full CI on a cron
+# would be wasteful and would race with the normal push CI.
+
+name: security
+
+on:
+  schedule:
+    # Mondays at 09:00 UTC. Picked so the result lands at the
+    # start of the European working week; adjust if the team
+    # shifts timezones.
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+
+# Cancel superseded scheduled runs if a manual dispatch fires
+# while a cron run is still pending.
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit-deny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: security
+
+      - name: cargo audit
+        uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: cargo deny
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check

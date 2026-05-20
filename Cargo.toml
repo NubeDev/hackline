@@ -1,0 +1,71 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/hackline-proto",
+    "crates/hackline-core",
+    "crates/hackline-client",
+    "crates/hackline-agent",
+    "crates/hackline-gateway",
+    "crates/hackline-cli",
+]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/NubeDev/hackline"
+rust-version = "1.88"
+# Workspace crates are not published to crates.io. Declaring this
+# explicitly lets cargo-deny's `allow-wildcard-paths` recognise the
+# workspace-internal `*` deps as private, not public-API leaks.
+publish = false
+
+[workspace.dependencies]
+tokio = { version = "1", features = ["full"] }
+zenoh = { version = "1.9", default-features = false, features = ["transport_tcp"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4", "serde"] }
+thiserror = "2"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+futures = "0.3"
+toml = "0.8"
+rusqlite = { version = "0.32", features = ["bundled"] }
+r2d2 = "0.8"
+r2d2_sqlite = "0.25"
+axum = "0.8"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+sha2 = "0.10"
+subtle = "2"
+rand = "0.9"
+hex = "0.4"
+base64 = "0.22"
+clap = { version = "4", features = ["derive", "env"] }
+reqwest = { version = "0.12", features = ["json"] }
+dirs = "6"
+axum-server = { version = "0.8", features = ["tls-rustls"] }
+tokio-rustls = "0.26"
+rustls = { version = "0.23", default-features = false, features = ["std", "ring"] }
+rcgen = "0.14"
+instant-acme = { version = "0.8", features = ["rcgen", "ring"] }
+rustls-pemfile = "2"
+arc-swap = "1"
+x509-parser = "0.16"
+specta = { version = "=2.0.0-rc.23", features = ["derive", "uuid"] }
+specta-typescript = "=0.0.10"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+# Audit-row inserts (`db::cmd_outbox::enqueue`, `db::logs::list`),
+# tunnel-listener startup (`tunnel::tcp_listener::run_tcp_listener`,
+# `run_bridged_connection`), and the agent diagnostic state ctor
+# (`diag::state::new`) all take 8–12 args by design. Each is a single
+# call site that wires already-built collaborators together; a config
+# struct would just rename the parameters once. Allowed at the
+# workspace level so the lint doesn't get re-litigated per call site.
+too_many_arguments = "allow"

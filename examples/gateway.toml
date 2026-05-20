@@ -1,0 +1,11 @@
+listen = "127.0.0.1:8080"
+database = "/tmp/hackline-test.db"
+
+[zenoh]
+mode = "peer"
+listen = ["tcp/127.0.0.1:7448"]
+connect = ["tcp/127.0.0.1:7447"]
+
+[log]
+level = "info,hackline_core=debug"
+format = "pretty"

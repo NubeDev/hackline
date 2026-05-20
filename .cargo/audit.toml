@@ -1,0 +1,22 @@
+# cargo-audit configuration.
+#
+# Ignored advisories must include a one-line rationale and the
+# upstream fix path. Bare entries (no rationale) are not allowed.
+[advisories]
+ignore = [
+    # RUSTSEC-2026-0041 — lz4_flex 0.10.0 decompression info-leak.
+    # Pulled in transitively by zenoh-transport 1.9.0 via its caret
+    # range; the fix is >=0.11.6 which is outside the resolvable
+    # range. Revisit when zenoh bumps lz4_flex (track upstream:
+    # https://github.com/eclipse-zenoh/zenoh).
+    "RUSTSEC-2026-0041",
+    # RUSTSEC-2024-0436 — paste unmaintained. Pulled in transitively
+    # by sqlx-macros; informational only (unmaintained, no CVE),
+    # no resolvable upgrade. Revisit when sqlx migrates off paste.
+    "RUSTSEC-2024-0436",
+    # RUSTSEC-2025-0134 — rustls-pemfile unmaintained. Pulled in
+    # transitively under gateway's `tls` feature via instant-acme
+    # → hyper-rustls. Upstream guidance is to migrate to
+    # rustls-pki-types' PemObject API; no resolvable upgrade today.
+    "RUSTSEC-2025-0134",
+]

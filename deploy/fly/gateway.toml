@@ -1,0 +1,16 @@
+# Fly.io gateway config baked into the Docker image.
+#
+# Bind to all interfaces so Fly's proxy can reach the container.
+# The DB lives on the mounted volume (/data) so it survives machine
+# restarts and image rebuilds.
+
+listen = "0.0.0.0:8080"
+database = "/data/gateway.db"
+
+[zenoh]
+mode = "peer"
+listen = ["tcp/0.0.0.0:7448"]
+
+[log]
+level = "info,hackline_core=info,hackline_gateway=info"
+format = "json"

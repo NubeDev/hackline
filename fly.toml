@@ -1,0 +1,67 @@
+# Fly.io app config for hackline-gateway.
+#
+# Rename `app` before first deploy: `fly apps create <your-name>` then
+# update the value here. Region is a single-machine default — add more
+# with `fly scale count` once the gateway supports HA (it does not yet:
+# SQLite is single-writer, see SCOPE.md).
+#
+# TLS is terminated at Fly's edge (`force_https = true`) so the gateway
+# binary itself runs plain HTTP on :8080. To run with the embedded
+# `tls` feature instead, rebuild the image with `--features tls` and
+# expose port 443 as an `internal_port` raw TCP service.
+
+app = "hackline-gateway"
+primary_region = "syd"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  RUST_LOG = "info,hackline_core=info,hackline_gateway=info"
+
+# SQLite + ACME cache + any future on-disk state. Create with:
+#   fly volumes create hackline_data --region syd --size 1
+[[mounts]]
+  source = "hackline_data"
+  destination = "/data"
+
+# REST API + SSE. Fly's edge proxy handles TLS; the container speaks
+# plain HTTP. `auto_stop_machines = false` because the gateway holds
+# long-lived SSE streams and zenoh sessions that should not idle out.
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+# Public Zenoh TCP listener for agents that connect over the internet
+# rather than via the REST tunnel. Disable by removing this block if
+# all agents reach the gateway via REST/HTTP only.
+[[services]]
+  protocol = "tcp"
+  internal_port = 7448
+  processes = ["app"]
+
+  [[services.ports]]
+    port = 7448
+
+  [services.concurrency]
+    type = "connections"
+    hard_limit = 1000
+    soft_limit = 800
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+
+[checks]
+  [checks.http]
+    type = "http"
+    port = 8080
+    interval = "15s"
+    timeout = "2s"
+    grace_period = "10s"
+    method = "get"
+    path = "/v1/health"

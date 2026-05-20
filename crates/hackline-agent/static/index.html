@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en" data-bs-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>hackline-agent · diag</title>
+    <link rel="stylesheet" href="/static/bootstrap.min.css" />
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <nav class="navbar navbar-expand-md bg-body-tertiary border-bottom">
+      <div class="container-fluid">
+        <a class="navbar-brand" href="#/">hackline-agent</a>
+        <ul class="navbar-nav me-auto">
+          <li class="nav-item"><a class="nav-link" data-route="/" href="#/">status</a></li>
+          <li class="nav-item"><a class="nav-link" data-route="/zenoh" href="#/zenoh">zenoh</a></li>
+          <li class="nav-item"><a class="nav-link" data-route="/connections" href="#/connections">connections</a></li>
+        </ul>
+        <span id="zid-badge" class="badge text-bg-secondary mono"></span>
+      </div>
+    </nav>
+    <main class="container-fluid py-4">
+      <div id="view"></div>
+    </main>
+    <script type="module" src="/static/app.js"></script>
+  </body>
+</html>
