@@ -70,6 +70,13 @@ export function DevicesPage() {
       <PageHeader
         title="Devices"
         description="Every box on the fabric. Click a row for tunnel + message-plane detail."
+        help={
+          <div className="space-y-2">
+            <p>One row per registered <strong>hackline-agent</strong>. Status comes from Zenoh liveliness plus a live RTT probe — if the agent’s session is up, the row is <em>online</em>.</p>
+            <p><strong>Use it to:</strong> see which devices are reachable, jump into a device to manage its tunnels, or manually register a ZID before the agent first connects.</p>
+            <p><strong>Debug offline:</strong> check the agent process is running and connected to the gateway (the agent’s diag UI shows <code>gateway.connected</code>). A device with <em>Last seen</em> in the distant past usually means the agent’s Zenoh session dropped.</p>
+          </div>
+        }
         actions={
           <Button size="sm" onClick={() => setCreating((v) => !v)}>
             {creating ? "Cancel" : "Add device"}

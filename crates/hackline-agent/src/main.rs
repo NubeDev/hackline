@@ -47,19 +47,25 @@ async fn main() -> anyhow::Result<()> {
     // (or session loss), at which point the gateway gets a `Delete`.
     let _liveliness = liveliness::declare(&session, &cfg.org, &zid).await?;
 
-    // Diag state is shared between the connect handler (which
-    // appends to the recent-connections ring) and the diag HTTP
-    // server. Construct once, clone the Arc for each consumer.
+    // Diag state owns the session arc and the active-port map. The
+    // connect loop and the diag HTTP handlers both go through it,
+    // so adding/removing ports at runtime stays consistent.
     let diag_state = Arc::new(DiagState::new(
         cfg.zid.clone(),
         cfg.label.clone(),
         cfg.org.clone(),
-        cfg.allowed_ports.clone(),
         session.zid().to_string(),
         cfg.zenoh.mode.clone(),
         cfg.zenoh.listen.clone(),
         cfg.zenoh.connect.clone(),
+        session.clone(),
+        zid.clone(),
     ));
+
+    // Declare the startup set of port queryables. Each one runs as
+    // a detached task owned by `DiagState`; removing a port from
+    // the UI aborts that task and undeclares the keyexpr.
+    connect::start_initial_ports(diag_state.clone(), &cfg.allowed_ports).await?;
 
     if cfg.diag.enabled {
         let addr = diag::parse_bind(&cfg.diag.bind)?;
@@ -82,7 +88,12 @@ async fn main() -> anyhow::Result<()> {
         started_at,
     );
 
-    connect::serve_connect(session, &cfg.org, &zid, &cfg.allowed_ports, diag_state).await?;
+    // Block on Ctrl-C so the liveliness token and active-port
+    // queryables stay declared until the operator stops the process.
+    if let Err(e) = tokio::signal::ctrl_c().await {
+        warn!("ctrl_c listener failed: {e}");
+    }
+    info!("shutting down");
     Ok(())
 }
 

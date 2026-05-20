@@ -1,27 +1,36 @@
 <!doctype html>
-<html lang="en" data-bs-theme="dark">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>hackline-agent · diag</title>
+    <title>hackline-agent</title>
     <link rel="stylesheet" href="/static/bootstrap.min.css" />
     <link rel="stylesheet" href="/static/style.css" />
   </head>
   <body>
-    <nav class="navbar navbar-expand-md bg-body-tertiary border-bottom">
-      <div class="container-fluid">
-        <a class="navbar-brand" href="#/">hackline-agent</a>
-        <ul class="navbar-nav me-auto">
-          <li class="nav-item"><a class="nav-link" data-route="/" href="#/">status</a></li>
-          <li class="nav-item"><a class="nav-link" data-route="/zenoh" href="#/zenoh">zenoh</a></li>
-          <li class="nav-item"><a class="nav-link" data-route="/connections" href="#/connections">connections</a></li>
-        </ul>
-        <span id="zid-badge" class="badge text-bg-secondary mono"></span>
-      </div>
-    </nav>
-    <main class="container-fluid py-4">
-      <div id="view"></div>
-    </main>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="sidebar-brand">
+          <div class="brand-title">hackline</div>
+          <div class="brand-sub">agent · device</div>
+        </div>
+        <nav class="sidebar-nav">
+          <a class="nav-link" data-route="/" href="#/">Overview</a>
+          <a class="nav-link" data-route="/ports" href="#/ports">Ports</a>
+          <a class="nav-link" data-route="/connections" href="#/connections">Connections</a>
+          <a class="nav-link" data-route="/zenoh" href="#/zenoh">Zenoh</a>
+          <a class="nav-link" data-route="/setup" href="#/setup">Setup</a>
+        </nav>
+        <div class="sidebar-footer">
+          <span id="conn-badge" class="badge badge-secondary">…</span>
+          <span id="zid-badge" class="badge badge-muted mono"></span>
+        </div>
+      </aside>
+      <main class="main-content">
+        <div id="toast-host" class="toast-host"></div>
+        <div id="view"></div>
+      </main>
+    </div>
     <script type="module" src="/static/app.js"></script>
   </body>
 </html>

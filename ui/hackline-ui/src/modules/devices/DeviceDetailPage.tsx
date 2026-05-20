@@ -114,6 +114,13 @@ export function DeviceDetailPage({ id }: { id: number }) {
       <PageHeader
         title={device.label ?? `Device #${device.id}`}
         description={device.zid}
+        help={
+          <div className="space-y-2">
+            <p>One device in detail. <strong>Health</strong> is a live RTT probe + the gateway\u2019s last-seen timestamp. <strong>Agent info</strong> is fetched on demand from the agent itself (version, uptime, allowed ports).</p>
+            <p><strong>Tunnels</strong> lists the ports this device currently exposes through the gateway. Add/remove from here.</p>
+            <p><strong>Debug:</strong> if Agent info fails but Health is online, the agent\u2019s <code>info</code> queryable isn\u2019t responding \u2014 check the agent log. If both are stale, the device or its Zenoh session is down.</p>
+          </div>
+        }
         actions={
           <>
             {health == null ? (

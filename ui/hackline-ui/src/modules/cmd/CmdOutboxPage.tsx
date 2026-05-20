@@ -48,6 +48,13 @@ export function CmdOutboxPage() {
       <PageHeader
         title="Cmd outbox"
         description="Durable device-bound commands. Pending entries flush when the device comes back online."
+        help={
+          <div className="space-y-2">
+            <p>Per-device queue of commands sent with <code>POST /v1/devices/:id/cmd/:topic</code>. The gateway holds each entry until the agent acks it, so commands survive device reboots and brief network drops.</p>
+            <p><strong>Status flow:</strong> <em>pending</em> → <em>delivered</em> (handed to the agent) → <em>acked</em> (agent confirmed). <em>Expired</em> means the TTL elapsed before delivery.</p>
+            <p><strong>Debug:</strong> entries stuck in <em>pending</em> usually mean the device is offline. Entries that reach <em>delivered</em> but never <em>acked</em> point at the agent’s command handler.</p>
+          </div>
+        }
       />
       <PageBody>
         <div className="mb-4 flex flex-wrap items-end gap-2 rounded-lg border bg-card p-3">

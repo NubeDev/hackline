@@ -1,21 +1,29 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { HelpTip } from "@/components/HelpTip";
 
 // Page chrome shared by every route. Centralises the title row so
-// individual pages don't reinvent spacing.
+// individual pages don't reinvent spacing. `help` renders a small
+// `?` next to the title; the page owns the prose so it lives with
+// the rest of the page.
 export function PageHeader({
   title,
   description,
   actions,
+  help,
 }: {
   title: string;
   description?: string;
   actions?: React.ReactNode;
+  help?: React.ReactNode;
 }) {
   return (
     <div className="flex items-end justify-between border-b bg-background px-6 py-4">
       <div>
-        <h1 className="text-base font-semibold leading-tight">{title}</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-base font-semibold leading-tight">{title}</h1>
+          {help ? <HelpTip>{help}</HelpTip> : null}
+        </div>
         {description ? (
           <p className="text-xs text-muted-foreground">{description}</p>
         ) : null}

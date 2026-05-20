@@ -51,8 +51,14 @@ pub async fn handler(
     .await
     .map_err(|e| GatewayError::Config(format!("blocking task join: {e}")))??;
 
-    let online = online_from_last_seen(device.last_seen_at, now_unix_secs());
     let rtt_ms = cached_rtt_ms(&state, org_id, device.id, &org.slug, &device.zid).await;
+    // A live `liveliness::Get` reply is authoritative for `online`:
+    // it proves the token is currently held even when the gateway's
+    // background fan-in hasn't observed a fresh sample (zenoh
+    // liveliness is presence-based; tokens don't republish, so a
+    // long-held token can drift past `ONLINE_STALE_SECS`).
+    let online =
+        rtt_ms.is_some() || online_from_last_seen(device.last_seen_at, now_unix_secs());
 
     Ok(Json(DeviceHealth {
         online,

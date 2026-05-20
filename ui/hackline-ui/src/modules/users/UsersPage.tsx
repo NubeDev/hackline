@@ -54,6 +54,13 @@ export function UsersPage() {
       <PageHeader
         title="Users"
         description="Bearer tokens are shown once, immediately after minting. Copy them now or reissue."
+        help={
+          <div className="space-y-2">
+            <p>Operators who can call the REST API. Each user has one role and one bearer token; the gateway stores only a hash, so the raw token is shown <strong>once</strong> at mint time.</p>
+            <p><strong>Roles:</strong> <em>owner</em> full access incl. user mgmt, <em>admin</em> manages devices/tunnels/cmd, <em>operator</em> sends cmds and reads, <em>viewer</em> read-only.</p>
+            <p><strong>Lost a token?</strong> Reissue from this page — the old token is invalidated immediately.</p>
+          </div>
+        }
         actions={
           <Button size="sm" onClick={() => setCreating((v) => !v)}>
             {creating ? "Cancel" : "Add user"}

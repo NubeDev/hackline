@@ -56,6 +56,13 @@ export function EventsPage() {
       <PageHeader
         title="Live events"
         description="SSE stream from /v1/events/stream. Newest first; capped at 500 entries."
+        help={
+          <div className="space-y-2">
+            <p>Real-time feed of message-plane events the gateway is observing (device lifecycle, tunnel opens/closes, cmd state changes, logs).</p>
+            <p><strong>Use it to:</strong> watch what happens while you reproduce a problem — click <em>Start</em>, perform the action, then read the stream from the top.</p>
+            <p>The stream is ephemeral; closing the page or pressing <em>Stop</em> ends the subscription. For long-term history use the Audit page.</p>
+          </div>
+        }
         actions={
           <>
             {running ? (

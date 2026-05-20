@@ -31,6 +31,13 @@ export function AuditPage() {
       <PageHeader
         title="Audit log"
         description="Append-only record of every privileged action."
+        help={
+          <div className="space-y-2">
+            <p>Persistent record of every privileged action: user/token mints, device creation, tunnel changes, command sends. Stored in SQLite and bounded by a ring buffer.</p>
+            <p><strong>Use it to:</strong> answer “who did what, when” — e.g. who minted that token, when was this tunnel removed, which API call enqueued that command.</p>
+            <p>Unlike <em>Live events</em> this survives restarts. Subject and Detail are free-form JSON; the action name is the stable key to filter on.</p>
+          </div>
+        }
         actions={
           <Button size="sm" variant="outline" onClick={refresh}>
             Refresh

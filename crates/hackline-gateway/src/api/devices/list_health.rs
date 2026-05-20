@@ -66,8 +66,11 @@ pub async fn handler(
         let slug = org_slug.as_str();
         let state_ref = &state;
         async move {
-            let online = online_from_last_seen(d.last_seen_at, now);
             let rtt_ms = cached_rtt_ms(state_ref, org_id, d.id, slug, &d.zid).await;
+            // See `health.rs`: live probe reply trumps stale
+            // `last_seen_at` because liveliness tokens don't
+            // republish on their own.
+            let online = rtt_ms.is_some() || online_from_last_seen(d.last_seen_at, now);
             DeviceHealthEntry {
                 device_id: d.id,
                 online,
