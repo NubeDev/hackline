@@ -3,8 +3,8 @@ allowed_ports = [9998]
 label = "test-agent"
 
 [zenoh]
-mode = "peer"
-listen = ["tcp/127.0.0.1:7447"]
+mode = "client"
+connect = ["tcp/hackline.zenoh.nube-iiot.com:7447"]
 
 [log]
 level = "info,hackline_core=debug"

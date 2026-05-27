@@ -1,4 +1,5 @@
 listen = "127.0.0.1:8080"
+http_listen = "127.0.0.1:9000"
 database = "/tmp/hackline-test.db"
 
 [zenoh]

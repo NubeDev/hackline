@@ -1,0 +1,24 @@
+# Production gateway config: Zenoh peer with mTLS.
+# Caddy or similar sits in front for HTTPS (port 443).
+# Zenoh listens on tls/0.0.0.0:7447 with private CA certs.
+# Peer mode enables local multicast discovery while also
+# accepting TLS connections from remote agents.
+
+listen = "127.0.0.1:8080"
+http_listen = "127.0.0.1:9000"
+database = "/var/lib/hackline/gateway.db"
+
+[zenoh]
+mode = "peer"
+listen = ["tls/0.0.0.0:7447"]
+
+[zenoh.tls]
+root_ca_certificate = "/etc/hackline/certs/ca.pem"
+server_certificate = "/etc/hackline/certs/zenoh-server.pem"
+server_private_key = "/etc/hackline/certs/zenoh-server-key.pem"
+client_auth = true
+verify_name_on_connect = false
+
+[log]
+level = "info,hackline_core=info,hackline_gateway=info"
+format = "json"

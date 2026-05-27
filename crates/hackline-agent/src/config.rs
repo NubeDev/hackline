@@ -46,6 +46,36 @@ pub struct ZenohConfig {
     pub listen: Vec<String>,
     #[serde(default)]
     pub connect: Vec<String>,
+    #[serde(default)]
+    pub tls: Option<ZenohTlsConfig>,
+}
+
+/// Optional TLS block for Zenoh transport. When present, Zenoh
+/// endpoints should use the `tls/` scheme instead of `tcp/`.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ZenohTlsConfig {
+    /// CA certificate used to verify the peer's certificate.
+    pub root_ca_certificate: String,
+    /// Server certificate (router/peer mode).
+    #[serde(default)]
+    pub server_certificate: Option<String>,
+    /// Server private key (router/peer mode).
+    #[serde(default)]
+    pub server_private_key: Option<String>,
+    /// Client certificate (client mode).
+    #[serde(default)]
+    pub client_certificate: Option<String>,
+    /// Client private key (client mode).
+    #[serde(default)]
+    pub client_private_key: Option<String>,
+    /// Require connecting peers to present a valid client cert.
+    #[serde(default)]
+    pub client_auth: bool,
+    /// Skip hostname/domain verification on the peer's cert.
+    /// Needed for peer-to-peer TLS on LAN where peers have no domain.
+    #[serde(default = "default_verify_name")]
+    pub verify_name_on_connect: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -74,6 +104,9 @@ fn default_log_level() -> String {
 }
 fn default_log_format() -> String {
     "pretty".into()
+}
+fn default_verify_name() -> bool {
+    true
 }
 
 #[derive(Debug, Deserialize)]
@@ -132,6 +165,56 @@ impl AgentConfig {
         config
             .insert_json5("scouting/multicast/enabled", "false")
             .map_err(|e| AgentError::Config(format!("zenoh scouting: {e}")))?;
+        if let Some(tls) = &self.zenoh.tls {
+            config
+                .insert_json5(
+                    "transport/link/tls/root_ca_certificate",
+                    &format!(r#""{}""#, tls.root_ca_certificate),
+                )
+                .map_err(|e| AgentError::Config(format!("zenoh tls root_ca: {e}")))?;
+            if let Some(cert) = &tls.server_certificate {
+                config
+                    .insert_json5(
+                        "transport/link/tls/listen_certificate",
+                        &format!(r#""{}""#, cert),
+                    )
+                    .map_err(|e| AgentError::Config(format!("zenoh tls server_cert: {e}")))?;
+            }
+            if let Some(key) = &tls.server_private_key {
+                config
+                    .insert_json5(
+                        "transport/link/tls/listen_private_key",
+                        &format!(r#""{}""#, key),
+                    )
+                    .map_err(|e| AgentError::Config(format!("zenoh tls server_key: {e}")))?;
+            }
+            if let Some(cert) = &tls.client_certificate {
+                config
+                    .insert_json5(
+                        "transport/link/tls/connect_certificate",
+                        &format!(r#""{}""#, cert),
+                    )
+                    .map_err(|e| AgentError::Config(format!("zenoh tls client_cert: {e}")))?;
+            }
+            if let Some(key) = &tls.client_private_key {
+                config
+                    .insert_json5(
+                        "transport/link/tls/connect_private_key",
+                        &format!(r#""{}""#, key),
+                    )
+                    .map_err(|e| AgentError::Config(format!("zenoh tls client_key: {e}")))?;
+            }
+            if tls.client_auth {
+                config
+                    .insert_json5("transport/link/tls/enable_mtls", "true")
+                    .map_err(|e| AgentError::Config(format!("zenoh tls client_auth: {e}")))?;
+            }
+            if !tls.verify_name_on_connect {
+                config
+                    .insert_json5("transport/link/tls/verify_name_on_connect", "false")
+                    .map_err(|e| AgentError::Config(format!("zenoh tls verify_name: {e}")))?;
+            }
+        }
         Ok(config)
     }
 }
