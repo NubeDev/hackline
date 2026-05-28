@@ -20,6 +20,24 @@ database = "/var/lib/hackline/gateway.db"
 mode = "client"
 connect = ["tcp/router.example.com:7447"]
 
+[zenoh.access_control]
+enabled = true
+default_permission = "deny"
+
+[[zenoh.access_control.rules]]
+id = "allow-device-prefix"
+permission = "allow"
+messages = ["put", "delete", "query", "reply", "declare_subscriber", "declare_queryable"]
+key_exprs = ["hackline/default/device-01/**"]
+
+[[zenoh.access_control.subjects]]
+id = "device-01"
+cert_common_names = ["device-01"]
+
+[[zenoh.access_control.policies]]
+rules = ["allow-device-prefix"]
+subjects = ["device-01"]
+
 # Public-listener bind address for forwarded TCP/HTTP tunnels.
 # Caddy terminates TLS in front of the HTTP listener.
 [listeners]
@@ -49,12 +67,47 @@ label = "edge-1234"
 mode = "peer"
 listen = ["tcp/0.0.0.0:7447"]
 
+[zenoh.access_control]
+enabled = true
+default_permission = "deny"
+
+[[zenoh.access_control.rules]]
+id = "allow-gateway-own-prefix"
+permission = "allow"
+messages = ["query", "reply", "put", "delete", "declare_subscriber", "declare_queryable", "liveliness_token"]
+key_exprs = ["hackline/default/device-01/**"]
+
+[[zenoh.access_control.subjects]]
+id = "gateway"
+cert_common_names = ["hackline.zenoh.nube-iiot.com"]
+
+[[zenoh.access_control.policies]]
+rules = ["allow-gateway-own-prefix"]
+subjects = ["gateway"]
+
 [log]
 level = "info"
 format = "json"
 ```
 
 Rendered + validated by [`hackline-agent::config`](../crates/hackline-agent/src/config.rs).
+
+### ACL fields
+
+`[zenoh.access_control]` mirrors Zenoh's top-level `access_control`
+object.
+
+- `enabled`: enable or disable ACL enforcement.
+- `default_permission`: `"allow"` or `"deny"` for unmatched traffic.
+- `rules`: message filters (`messages`, optional `flows`, `key_exprs`) with
+	`permission`.
+- `subjects`: peer identities (`cert_common_names`, `usernames`,
+	`interfaces`, `link_protocols`, `zids`).
+- `policies`: attaches rule IDs to subject IDs.
+
+For production, prefer subject matching by certificate common name
+(`cert_common_names`) with mTLS. ZID matching is useful for local
+prototyping but is not a strong identity by itself.
 
 ## Precedence
 

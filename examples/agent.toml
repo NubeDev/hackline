@@ -6,6 +6,37 @@ label = "test-agent"
 mode = "client"
 connect = ["tcp/hackline.zenoh.nube-iiot.com:7447"]
 
+[zenoh.access_control]
+enabled = true
+default_permission = "deny"
+
+# The agent allows the gateway (or any connected peer in local dev)
+# to query/subscribe on its own prefix. The agent's own egress
+# (replies, puts, liveliness) also needs to be allowed.
+[[zenoh.access_control.rules]]
+id = "allow-own-prefix"
+permission = "allow"
+messages = [
+	"put",
+	"delete",
+	"query",
+	"reply",
+	"declare_subscriber",
+	"declare_queryable",
+	"liveliness_token",
+	"declare_liveliness_subscriber",
+	"liveliness_query",
+]
+key_exprs = ["hackline/default/aa01/**"]
+
+# In local dev, match all peers (empty subject = wildcard).
+[[zenoh.access_control.subjects]]
+id = "any-peer"
+
+[[zenoh.access_control.policies]]
+rules = ["allow-own-prefix"]
+subjects = ["any-peer"]
+
 [log]
 level = "info,hackline_core=debug"
 format = "pretty"

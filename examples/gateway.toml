@@ -7,6 +7,63 @@ mode = "peer"
 listen = ["tcp/127.0.0.1:7448"]
 connect = ["tcp/127.0.0.1:7447"]
 
+[zenoh.access_control]
+enabled = true
+default_permission = "deny"
+
+# --- Device aa01: restricted to its own prefix only ---
+[[zenoh.access_control.rules]]
+id = "allow-aa01-prefix"
+permission = "allow"
+messages = [
+	"put",
+	"delete",
+	"query",
+	"reply",
+	"declare_subscriber",
+	"declare_queryable",
+	"liveliness_token",
+	"declare_liveliness_subscriber",
+	"liveliness_query",
+]
+key_exprs = ["hackline/default/aa01/**"]
+
+# --- Gateway: full access to all device prefixes ---
+[[zenoh.access_control.rules]]
+id = "allow-gateway-all"
+permission = "allow"
+messages = [
+	"put",
+	"delete",
+	"query",
+	"reply",
+	"declare_subscriber",
+	"declare_queryable",
+	"liveliness_token",
+	"declare_liveliness_subscriber",
+	"liveliness_query",
+]
+key_exprs = ["hackline/**"]
+
+# --- Subjects ---
+[[zenoh.access_control.subjects]]
+id = "device-aa01"
+zids = ["aa01"]
+
+# In local dev the gateway's own session is local, so match all
+# unidentified peers (empty subject = wildcard).
+[[zenoh.access_control.subjects]]
+id = "gateway-local"
+
+# --- Policies ---
+[[zenoh.access_control.policies]]
+rules = ["allow-aa01-prefix"]
+subjects = ["device-aa01"]
+
+[[zenoh.access_control.policies]]
+rules = ["allow-gateway-all"]
+subjects = ["gateway-local"]
+
 [log]
 level = "info,hackline_core=debug"
 format = "pretty"
