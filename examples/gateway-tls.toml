@@ -43,6 +43,22 @@ messages = [
 ]
 key_exprs = ["hackline/default/aa01/**"]
 
+[[zenoh.access_control.rules]]
+id = "allow-bb02-prefix"
+permission = "allow"
+messages = [
+  "put",
+  "delete",
+  "query",
+  "reply",
+  "declare_subscriber",
+  "declare_queryable",
+  "liveliness_token",
+  "declare_liveliness_subscriber",
+  "liveliness_query",
+]
+key_exprs = ["hackline/default/bb02/**"]
+
 # Gateway: full access to all device prefixes
 [[zenoh.access_control.rules]]
 id = "allow-gateway-all"
@@ -66,6 +82,10 @@ id = "aa01"
 cert_common_names = ["hackline-agent-01"]
 
 [[zenoh.access_control.subjects]]
+id = "bb02"
+cert_common_names = ["hackline-agent-02"]
+
+[[zenoh.access_control.subjects]]
 id = "gateway"
 cert_common_names = ["hackline.zenoh.nube-iiot.com"]
 
@@ -74,6 +94,11 @@ cert_common_names = ["hackline.zenoh.nube-iiot.com"]
 id = "aa01-policy"
 rules = ["allow-aa01-prefix"]
 subjects = ["aa01"]
+
+[[zenoh.access_control.policies]]
+id = "bb02-policy"
+rules = ["allow-bb02-prefix"]
+subjects = ["bb02"]
 
 [[zenoh.access_control.policies]]
 id = "gateway-policy"

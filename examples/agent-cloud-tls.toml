@@ -2,7 +2,7 @@
 # Uses local cert paths (adjust for your machine).
 # The cert CN should match the zid ("aa01") for ACL enforcement.
 
-zid = "aa01"
+zid = "bb02"
 allowed_ports = [9998]
 label = "test-agent"
 
@@ -12,8 +12,8 @@ connect = ["tls/hackline.zenoh.nube-iiot.com:7447"]
 
 [zenoh.tls]
 root_ca_certificate = "/Users/brabeemsapkota/.hackline/certs/ca.pem"
-client_certificate = "/Users/brabeemsapkota/.hackline/certs/device-01.pem"
-client_private_key = "/Users/brabeemsapkota/.hackline/certs/device-01-key.pem"
+client_certificate = "/Users/brabeemsapkota/.hackline/certs/device-02.pem"
+client_private_key = "/Users/brabeemsapkota/.hackline/certs/device-02-key.pem"
 verify_name_on_connect = false
 client_auth = true
 
@@ -36,7 +36,7 @@ messages = [
   "declare_liveliness_subscriber",
   "liveliness_query",
 ]
-key_exprs = ["hackline/default/aa01/**"]
+key_exprs = ["hackline/default/bb02/**"]
 
 [[zenoh.access_control.subjects]]
 id = "gateway"
