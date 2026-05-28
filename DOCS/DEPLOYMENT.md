@@ -345,11 +345,16 @@ curl -X POST https://hackline.ca.nube-iiot.com/ca/sign \
 rm -f /tmp/csr_request.json
 ```
 
-### 20. Update gateway config for mTLS (peer mode)
+### 20. Update gateway config for mTLS + ACL (peer mode)
 
-Replace the gateway Zenoh config to use peer mode with TLS.
-Peer mode lets the gateway discover local peers via multicast
-while also accepting TLS connections from remote agents.
+Replace the gateway Zenoh config to use peer mode with TLS and
+deny-by-default ACL. Each device is restricted to its own key
+expression prefix (`hackline/default/<zid>/**`); the gateway
+itself gets full access to `hackline/**`.
+
+Subject matching uses `cert_common_names` — the CN from the
+device's mTLS certificate, set when the CSR was created
+(step 18: `-subj "/CN=hackline-agent-01"`).
 
 ```sh
 sudo tee /etc/hackline/gateway.toml > /dev/null << 'EOF'
@@ -368,11 +373,63 @@ server_private_key = "/etc/hackline/certs/zenoh-server-key.pem"
 client_auth = true
 verify_name_on_connect = false
 
+# --- ACL: deny-by-default, allow per-device prefix + gateway full ---
+[zenoh.access_control]
+enabled = true
+default_permission = "deny"
+
+# Device aa01 (cert CN "hackline-agent-01"): restricted to its own prefix
+[[zenoh.access_control.rules]]
+id = "allow-aa01-prefix"
+permission = "allow"
+messages = [
+  "put", "delete", "query", "reply",
+  "declare_subscriber", "declare_queryable",
+  "liveliness_token", "declare_liveliness_subscriber", "liveliness_query",
+]
+key_exprs = ["hackline/default/aa01/**"]
+
+# Gateway: full access to all device prefixes
+[[zenoh.access_control.rules]]
+id = "allow-gateway-all"
+permission = "allow"
+messages = [
+  "put", "delete", "query", "reply",
+  "declare_subscriber", "declare_queryable",
+  "liveliness_token", "declare_liveliness_subscriber", "liveliness_query",
+]
+key_exprs = ["hackline/**"]
+
+# Subjects: identified by mTLS certificate CN
+[[zenoh.access_control.subjects]]
+id = "aa01"
+cert_common_names = ["hackline-agent-01"]
+
+[[zenoh.access_control.subjects]]
+id = "gateway"
+cert_common_names = ["hackline.zenoh.nube-iiot.com"]
+
+# Policies: who gets what
+[[zenoh.access_control.policies]]
+id = "aa01-policy"
+rules = ["allow-aa01-prefix"]
+subjects = ["aa01"]
+
+[[zenoh.access_control.policies]]
+id = "gateway-policy"
+rules = ["allow-gateway-all"]
+subjects = ["gateway"]
+
 [log]
 level = "info,hackline_core=info,hackline_gateway=info"
 format = "json"
 EOF
 ```
+
+To add a second device later, add another `rules` entry with its
+ZID prefix, a `subjects` entry with its cert CN, and a `policies`
+entry wiring them together. See `examples/gateway-tls.toml` for a
+two-device example.
 
 Restart the gateway:
 
@@ -382,11 +439,15 @@ tmux attach -t hackline
 ~/hackline/target/release/serve /etc/hackline/gateway.toml
 ```
 
-### 21. Update agent config for mTLS (peer mode)
+### 21. Update agent config for mTLS + ACL (peer mode)
 
 On your Mac, create the TLS agent config. Peer mode enables
 local multicast discovery for LAN peers while also connecting
 to the cloud gateway over TLS.
+
+The ACL on the agent side allows only the gateway (identified by
+its cert CN `hackline.zenoh.nube-iiot.com`) to interact with
+this agent's own prefix. Everything else is denied.
 
 ```toml
 # examples/agent-cloud-tls.toml
@@ -403,6 +464,31 @@ root_ca_certificate = "/Users/brabeem/.hackline/certs/ca.pem"
 client_certificate = "/Users/brabeem/.hackline/certs/device-01.pem"
 client_private_key = "/Users/brabeem/.hackline/certs/device-01-key.pem"
 verify_name_on_connect = false
+client_auth = true
+
+# --- ACL: deny-by-default, allow only own prefix for the gateway peer ---
+[zenoh.access_control]
+enabled = true
+default_permission = "deny"
+
+[[zenoh.access_control.rules]]
+id = "allow-own-prefix"
+permission = "allow"
+messages = [
+  "put", "delete", "query", "reply",
+  "declare_subscriber", "declare_queryable",
+  "liveliness_token", "declare_liveliness_subscriber", "liveliness_query",
+]
+key_exprs = ["hackline/default/aa01/**"]
+
+[[zenoh.access_control.subjects]]
+id = "gateway"
+cert_common_names = ["hackline.zenoh.nube-iiot.com"]
+
+[[zenoh.access_control.policies]]
+id = "gateway-policy"
+rules = ["allow-own-prefix"]
+subjects = ["gateway"]
 
 [log]
 level = "info,hackline_core=debug"
