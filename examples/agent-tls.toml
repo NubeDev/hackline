@@ -1,0 +1,59 @@
+# Production agent config: connects to gateway's Zenoh peer via mTLS + ACL.
+# Peer mode enables LAN discovery via multicast while also
+# connecting to the cloud gateway over TLS.
+#
+# Copy to /etc/hackline/agent.toml on the device, or use
+# examples/agent-cloud-tls.toml with Mac-local cert paths.
+
+zid = "device-01"
+allowed_ports = [8080]
+label = "edge-device-01"
+
+[zenoh]
+mode = "peer"
+connect = ["tls/hackline.zenoh.nube-iiot.com:7447"]
+
+[zenoh.tls]
+root_ca_certificate = "/etc/hackline/certs/ca.pem"
+client_certificate = "/etc/hackline/certs/device-01.pem"
+client_private_key = "/etc/hackline/certs/device-01-key.pem"
+verify_name_on_connect = false
+
+# --- ACL: deny-by-default, allow only own prefix for the gateway peer ---
+[zenoh.access_control]
+enabled = true
+default_permission = "deny"
+
+# All message types on this agent's own prefix.
+# Covers gateway ingress (queries, subscriber decls) and
+# agent egress (replies, puts, liveliness token).
+[[zenoh.access_control.rules]]
+id = "allow-own-prefix"
+permission = "allow"
+messages = [
+  "put",
+  "delete",
+  "query",
+  "reply",
+  "declare_subscriber",
+  "declare_queryable",
+  "liveliness_token",
+  "declare_liveliness_subscriber",
+  "liveliness_query",
+]
+key_exprs = ["hackline/default/device-01/**"]
+
+# Subject: gateway identified by its mTLS certificate CN
+[[zenoh.access_control.subjects]]
+id = "gateway"
+cert_common_names = ["hackline.zenoh.nube-iiot.com"]
+
+# Policy: gateway gets the own-prefix rule
+[[zenoh.access_control.policies]]
+id = "gateway-policy"
+rules = ["allow-own-prefix"]
+subjects = ["gateway"]
+
+[log]
+level = "info,hackline_core=debug"
+format = "pretty"

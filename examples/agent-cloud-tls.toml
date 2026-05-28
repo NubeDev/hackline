@@ -1,0 +1,52 @@
+# Mac-local agent config: connects to cloud gateway via mTLS + ACL.
+# Uses local cert paths (adjust for your machine).
+# The cert CN should match the zid ("aa01") for ACL enforcement.
+
+zid = "bb02"
+allowed_ports = [9998]
+label = "test-agent"
+
+[zenoh]
+mode = "peer"
+connect = ["tls/hackline.zenoh.nube-iiot.com:7447"]
+
+[zenoh.tls]
+root_ca_certificate = "/Users/brabeemsapkota/.hackline/certs/ca.pem"
+client_certificate = "/Users/brabeemsapkota/.hackline/certs/device-02.pem"
+client_private_key = "/Users/brabeemsapkota/.hackline/certs/device-02-key.pem"
+verify_name_on_connect = false
+client_auth = true
+
+# --- ACL: deny-by-default, allow only own prefix for the gateway peer ---
+[zenoh.access_control]
+enabled = true
+default_permission = "deny"
+
+[[zenoh.access_control.rules]]
+id = "allow-own-prefix"
+permission = "allow"
+messages = [
+  "put",
+  "delete",
+  "query",
+  "reply",
+  "declare_subscriber",
+  "declare_queryable",
+  "liveliness_token",
+  "declare_liveliness_subscriber",
+  "liveliness_query",
+]
+key_exprs = ["hackline/default/bb02/**"]
+
+[[zenoh.access_control.subjects]]
+id = "gateway"
+cert_common_names = ["hackline.zenoh.nube-iiot.com"]
+
+[[zenoh.access_control.policies]]
+id = "gateway-policy"
+rules = ["allow-own-prefix"]
+subjects = ["gateway"]
+
+[log]
+level = "info,hackline_core=debug"
+format = "pretty"

@@ -258,6 +258,12 @@ async fn bridge_with_prefix(
     let up = Arc::new(AtomicU64::new(0));
     let down = Arc::new(AtomicU64::new(0));
 
+    // Allow the agent time to declare its subscriber on `stream_gw`
+    // before we publish the prefix bytes. Without this, the prefix
+    // can arrive before the subscriber exists and get dropped —
+    // particularly over high-latency links (WAN).
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
     if !prefix.is_empty() {
         up.fetch_add(prefix.len() as u64, Ordering::Relaxed);
         publisher

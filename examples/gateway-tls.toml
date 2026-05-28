@@ -1,0 +1,110 @@
+# Production gateway config: Zenoh peer with mTLS + ACL.
+# Caddy or similar sits in front for HTTPS (port 443).
+# Zenoh listens on tls/0.0.0.0:7447 with private CA certs.
+# Peer mode enables local multicast discovery while also
+# accepting TLS connections from remote agents.
+#
+# Copy to /etc/hackline/gateway.toml on the remote machine.
+
+listen = "127.0.0.1:8080"
+http_listen = "127.0.0.1:9000"
+database = "/var/lib/hackline/gateway.db"
+
+[zenoh]
+mode = "peer"
+listen = ["tls/0.0.0.0:7447"]
+
+[zenoh.tls]
+root_ca_certificate = "/etc/hackline/certs/ca.pem"
+server_certificate = "/etc/hackline/certs/zenoh-server.pem"
+server_private_key = "/etc/hackline/certs/zenoh-server-key.pem"
+client_auth = true
+verify_name_on_connect = false
+
+# --- ACL: deny-by-default, allow per-device prefix + gateway full ---
+[zenoh.access_control]
+enabled = true
+default_permission = "deny"
+
+# Device aa01 (cert CN "device-01"): restricted to its own prefix only
+[[zenoh.access_control.rules]]
+id = "allow-aa01-prefix"
+permission = "allow"
+messages = [
+  "put",
+  "delete",
+  "query",
+  "reply",
+  "declare_subscriber",
+  "declare_queryable",
+  "liveliness_token",
+  "declare_liveliness_subscriber",
+  "liveliness_query",
+]
+key_exprs = ["hackline/default/aa01/**"]
+
+[[zenoh.access_control.rules]]
+id = "allow-bb02-prefix"
+permission = "allow"
+messages = [
+  "put",
+  "delete",
+  "query",
+  "reply",
+  "declare_subscriber",
+  "declare_queryable",
+  "liveliness_token",
+  "declare_liveliness_subscriber",
+  "liveliness_query",
+]
+key_exprs = ["hackline/default/bb02/**"]
+
+# Gateway: full access to all device prefixes
+[[zenoh.access_control.rules]]
+id = "allow-gateway-all"
+permission = "allow"
+messages = [
+  "put",
+  "delete",
+  "query",
+  "reply",
+  "declare_subscriber",
+  "declare_queryable",
+  "liveliness_token",
+  "declare_liveliness_subscriber",
+  "liveliness_query",
+]
+key_exprs = ["hackline/**"]
+
+# Subjects: identified by mTLS certificate CN
+[[zenoh.access_control.subjects]]
+id = "aa01"
+cert_common_names = ["hackline-agent-01"]
+
+[[zenoh.access_control.subjects]]
+id = "bb02"
+cert_common_names = ["hackline-agent-02"]
+
+[[zenoh.access_control.subjects]]
+id = "gateway"
+cert_common_names = ["hackline.zenoh.nube-iiot.com"]
+
+# Policies: who gets what
+[[zenoh.access_control.policies]]
+id = "aa01-policy"
+rules = ["allow-aa01-prefix"]
+subjects = ["aa01"]
+
+[[zenoh.access_control.policies]]
+id = "bb02-policy"
+rules = ["allow-bb02-prefix"]
+subjects = ["bb02"]
+
+[[zenoh.access_control.policies]]
+id = "gateway-policy"
+rules = ["allow-gateway-all"]
+subjects = ["gateway"]
+
+[log]
+level = "info,hackline_core=info,hackline_gateway=info"
+format = "json"

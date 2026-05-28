@@ -4,7 +4,7 @@
 
 use std::path::Path;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::error::GatewayError;
 
@@ -42,6 +42,96 @@ pub struct ZenohConfig {
     pub listen: Vec<String>,
     #[serde(default)]
     pub connect: Vec<String>,
+    #[serde(default)]
+    pub tls: Option<ZenohTlsConfig>,
+    #[serde(default)]
+    pub access_control: Option<ZenohAccessControlConfig>,
+}
+
+/// Optional ACL block for Zenoh transport-level authorization.
+///
+/// This mirrors Zenoh's top-level `access_control` object so operators can
+/// keep policy in the same gateway TOML file.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ZenohAccessControlConfig {
+    pub enabled: bool,
+    pub default_permission: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rules: Vec<ZenohAccessControlRule>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub subjects: Vec<ZenohAccessControlSubject>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub policies: Vec<ZenohAccessControlPolicy>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ZenohAccessControlRule {
+    pub id: String,
+    pub permission: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub messages: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub flows: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub key_exprs: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ZenohAccessControlSubject {
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub interfaces: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cert_common_names: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub usernames: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub link_protocols: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub zids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ZenohAccessControlPolicy {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    pub rules: Vec<String>,
+    pub subjects: Vec<String>,
+}
+
+/// Optional TLS block for Zenoh transport. When present, Zenoh
+/// endpoints should use the `tls/` scheme instead of `tcp/`.
+/// In router mode, set `server_certificate` + `server_private_key`
+/// + `client_auth`. In client mode, set `client_certificate` +
+///   `client_private_key`.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ZenohTlsConfig {
+    /// CA certificate used to verify the peer's certificate.
+    pub root_ca_certificate: String,
+    /// Server certificate (router/peer mode).
+    #[serde(default)]
+    pub server_certificate: Option<String>,
+    /// Server private key (router/peer mode).
+    #[serde(default)]
+    pub server_private_key: Option<String>,
+    /// Client certificate (client mode).
+    #[serde(default)]
+    pub client_certificate: Option<String>,
+    /// Client private key (client mode).
+    #[serde(default)]
+    pub client_private_key: Option<String>,
+    /// Require connecting peers to present a valid client cert.
+    #[serde(default)]
+    pub client_auth: bool,
+    /// Skip hostname/domain verification on the peer's cert.
+    /// Needed for peer-to-peer TLS on LAN where peers have no domain.
+    #[serde(default = "default_verify_name")]
+    pub verify_name_on_connect: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -172,6 +262,9 @@ fn default_log_level() -> String {
 fn default_log_format() -> String {
     "pretty".into()
 }
+fn default_verify_name() -> bool {
+    true
+}
 fn default_renew_before_days() -> u32 {
     30
 }
@@ -210,6 +303,63 @@ impl GatewayConfig {
         config
             .insert_json5("scouting/multicast/enabled", "false")
             .map_err(|e| GatewayError::Config(format!("zenoh scouting: {e}")))?;
+        if let Some(access_control) = &self.zenoh.access_control {
+            let json = serde_json::to_string(access_control)
+                .map_err(|e| GatewayError::Config(format!("zenoh access_control: {e}")))?;
+            config
+                .insert_json5("access_control", &json)
+                .map_err(|e| GatewayError::Config(format!("zenoh access_control: {e}")))?;
+        }
+        if let Some(tls) = &self.zenoh.tls {
+            config
+                .insert_json5(
+                    "transport/link/tls/root_ca_certificate",
+                    &format!(r#""{}""#, tls.root_ca_certificate),
+                )
+                .map_err(|e| GatewayError::Config(format!("zenoh tls root_ca: {e}")))?;
+            if let Some(cert) = &tls.server_certificate {
+                config
+                    .insert_json5(
+                        "transport/link/tls/listen_certificate",
+                        &format!(r#""{}""#, cert),
+                    )
+                    .map_err(|e| GatewayError::Config(format!("zenoh tls server_cert: {e}")))?;
+            }
+            if let Some(key) = &tls.server_private_key {
+                config
+                    .insert_json5(
+                        "transport/link/tls/listen_private_key",
+                        &format!(r#""{}""#, key),
+                    )
+                    .map_err(|e| GatewayError::Config(format!("zenoh tls server_key: {e}")))?;
+            }
+            if let Some(cert) = &tls.client_certificate {
+                config
+                    .insert_json5(
+                        "transport/link/tls/connect_certificate",
+                        &format!(r#""{}""#, cert),
+                    )
+                    .map_err(|e| GatewayError::Config(format!("zenoh tls client_cert: {e}")))?;
+            }
+            if let Some(key) = &tls.client_private_key {
+                config
+                    .insert_json5(
+                        "transport/link/tls/connect_private_key",
+                        &format!(r#""{}""#, key),
+                    )
+                    .map_err(|e| GatewayError::Config(format!("zenoh tls client_key: {e}")))?;
+            }
+            if tls.client_auth {
+                config
+                    .insert_json5("transport/link/tls/enable_mtls", "true")
+                    .map_err(|e| GatewayError::Config(format!("zenoh tls client_auth: {e}")))?;
+            }
+            if !tls.verify_name_on_connect {
+                config
+                    .insert_json5("transport/link/tls/verify_name_on_connect", "false")
+                    .map_err(|e| GatewayError::Config(format!("zenoh tls verify_name: {e}")))?;
+            }
+        }
         Ok(config)
     }
 }
@@ -308,5 +458,33 @@ mode = "client"
 "#;
         let cfg: GatewayConfig = toml::from_str(toml_str).unwrap();
         assert!(cfg.tls.is_none());
+    }
+
+    #[test]
+    fn acl_block_parses_from_toml() {
+        let toml_str = r#"
+[zenoh]
+mode = "peer"
+
+[zenoh.access_control]
+enabled = true
+default_permission = "deny"
+
+[[zenoh.access_control.rules]]
+id = "allow-device-01"
+permission = "allow"
+messages = ["put", "query"]
+key_exprs = ["hackline/default/device-01/**"]
+
+[[zenoh.access_control.subjects]]
+id = "device-01"
+cert_common_names = ["device-01"]
+
+[[zenoh.access_control.policies]]
+rules = ["allow-device-01"]
+subjects = ["device-01"]
+"#;
+        let cfg: GatewayConfig = toml::from_str(toml_str).unwrap();
+        assert!(cfg.zenoh.access_control.is_some());
     }
 }
